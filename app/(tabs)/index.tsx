@@ -3,7 +3,7 @@ import { hu } from 'date-fns/locale';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { RefreshControl, ScrollView, View } from 'react-native';
-import { AnimatedCircularProgress } from 'react-native-circular-progress';
+import CircularProgress from 'react-native-circular-progress-indicator';
 import {
   ActivityIndicator,
   Card,
@@ -18,6 +18,7 @@ import type { BudgetMonth } from '../../types/budget';
 const HomeScreen: React.FC = () => {
   const theme = useTheme();
   const router = useRouter();
+  
 
   // 🔹 majd auth contextből jön:
   const token = 'TOKEN_IDE';
@@ -167,21 +168,22 @@ const HomeScreen: React.FC = () => {
                     </Text>
                   </View>
 
-                  <AnimatedCircularProgress
-                    size={80}
-                    width={8}
-                    fill={remainingPercent}
-                    tintColor={theme.colors.primary}
-                    backgroundColor={theme.colors.outline}
-                    rotation={0}
-                    lineCap="round"
-                  >
-                    {(fill: number) => (
-                      <Text style={{ fontSize: 16, color: theme.colors.onSurface }}>
-                        {Math.round(fill)}%
-                      </Text>
-                    )}
-                  </AnimatedCircularProgress>
+                 
+                  <CircularProgress
+                    value={remainingPercent}        // 0–100
+                    maxValue={100}
+                    radius={40}                     // size(80) -> radius(40)
+                    activeStrokeWidth={8}           // width
+                    inActiveStrokeWidth={8}
+                    activeStrokeColor={theme.colors.primary}       // tintColor
+                    inActiveStrokeColor={theme.colors.outline}     // backgroundColor
+                    progressValueColor={theme.colors.onSurface}
+                    progressValueFontSize={16}
+                    inActiveStrokeOpacity={0.2}
+                    duration={1200}
+                    // formázd ugyanúgy egész %-ra, mint korábban:
+                    progressFormatter={(v) => `${Math.round(v)}%`}
+                  />
                 </View>
 
               </Card.Content>
