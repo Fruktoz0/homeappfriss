@@ -4,12 +4,13 @@ import type {
     BudgetExpense,
     BudgetFixedExpense,
     BudgetMonth,
+    BudgetMonthsResponse,
     BudgetWeek
 } from '../types/budget';
 
 
 // Fetch budget months for the logged-in user
-export async function getBudgetMonths(token: string): Promise<BudgetMonth[]> {
+export async function getBudgetMonths(token: string): Promise<BudgetMonthsResponse> {
     const res = await axios.get(`${API_URL}/budget/months`, {
         headers: {
             Authorization: `Bearer ${token}`
@@ -52,7 +53,7 @@ export async function getBudgetExpenses(token: string, monthId: number): Promise
 
 //Create a new expense for a budget month
 export async function createExpense(token: string, expense: Omit<BudgetExpense, 'id'>): Promise<BudgetExpense> {
-    const res = await axios.post(`${API_URL}/budget/expense`, expense, {
+    const res = await axios.post(`${API_URL}/budget/expenses`, expense, {
         headers: {
             Authorization: `Bearer ${token}`
         },
@@ -106,6 +107,16 @@ export async function markFixedExpensePaid(token: string, id: number): Promise<{
 //Delete a fixed expense by ID
 export async function deleteFixedExpense(token: string, id: number): Promise<{ message: string }> {
     const res = await axios.delete(`${API_URL}/budget/fixed-expense/${id}`, {
+        headers: {
+            Authorization: `Bearer ${token}`
+        },
+    });
+    return res.data;
+}
+
+//Update budget month total budget
+export async function updateBudgetMonth(token: string, monthId: number, total_budget: number) {
+    const res = await axios.put(`${API_URL}/budget/month/${monthId}`, { total_budget }, {
         headers: {
             Authorization: `Bearer ${token}`
         },

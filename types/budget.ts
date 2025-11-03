@@ -57,3 +57,9 @@ export interface BudgetSavingLog {
   createdByUserId: string;
   active: boolean;
 }
+
+
+export interface BudgetMonthsResponse {
+  allMonths: BudgetMonth[];
+  currentMonth: BudgetMonth | null;
+}

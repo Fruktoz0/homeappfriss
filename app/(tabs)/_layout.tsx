@@ -37,6 +37,15 @@ export default function TabsLayout() {
           ),
         }}
       />
+      <Tabs.Screen
+        name="statistics"
+        options={{
+          title: 'Statisztika',
+          tabBarIcon: ({ color, size }) => (
+            <MaterialCommunityIcons name="chart-bar" color={color} size={size} />
+          ),
+        }}
+      />
     </Tabs>
   );
 }
