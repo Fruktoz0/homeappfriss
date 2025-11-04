@@ -4,14 +4,13 @@ import type {
     BudgetExpense,
     BudgetFixedExpense,
     BudgetMonth,
-    BudgetMonthsResponse,
     BudgetWeek
 } from '../types/budget';
 
 
 // Fetch budget months for the logged-in user
-export async function getBudgetMonths(token: string): Promise<BudgetMonthsResponse> {
-    const res = await axios.get(`${API_URL}/budget/months`, {
+export async function getBudgetMonths(token: string, monthIndex: number): Promise<{ currentMonth: BudgetMonth }> {
+    const res = await axios.get(`${API_URL}/budget/months?month=${monthIndex}`, {
         headers: {
             Authorization: `Bearer ${token}`
         },
