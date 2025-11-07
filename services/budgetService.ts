@@ -122,3 +122,5 @@ export async function updateBudgetMonth(token: string, monthId: number, total_bu
     });
     return res.data;
 }
+
+//Coming soon: functions for updating expenses, fixed expenses, and budget weeks
