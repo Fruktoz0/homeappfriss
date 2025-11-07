@@ -1,15 +1,14 @@
-import { useRouter } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
+import * as Sharing from "expo-sharing";
 import React, { useCallback, useEffect, useState } from "react";
 import {
+  Alert,
   Dimensions,
-  RefreshControl,
-  ScrollView,
   TouchableOpacity,
-  View,
+  View
 } from "react-native";
 import CircularProgress from "react-native-circular-progress-indicator";
 import {
-  ActivityIndicator,
   Button,
   Card,
   FAB,
@@ -18,19 +17,20 @@ import {
   Portal,
   Text,
   TextInput,
-  useTheme,
+  useTheme
 } from "react-native-paper";
 import Carousel from "react-native-reanimated-carousel";
 import ExpenseList from "../../components/ExpenseList";
 import { useBudget } from "../../contexts/BudgetContext";
 import { getToken } from "../../services/authService";
-import { getBudgetMonths, updateBudgetMonth } from "../../services/budgetService";
+import { deleteExpense, getBudgetMonths, updateBudgetMonth } from "../../services/budgetService";
+import { exportExpensesToExcel } from "../../services/exportService";
 import type { BudgetMonth } from "../../types/budget";
 
 const { width } = Dimensions.get("window");
 const months = [
-  "Január", "Február", "Március", "Április", "Május", "Június",
-  "Július", "Augusztus", "Szeptember", "Október", "November", "December"
+  "Január","Február","Március","Április","Május","Június",
+  "Július","Augusztus","Szeptember","Október","November","December"
 ];
 
 const HomeScreen: React.FC = () => {
@@ -42,7 +42,7 @@ const HomeScreen: React.FC = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [fabOpen, setFabOpen] = useState(false);
   const [token, setToken] = useState<string | null>(null);
-  const { budgetMonthId, setBudgetMonthId } = useBudget();
+  const { setBudgetMonthId } = useBudget();
   const [modalVisible, setModalVisible] = useState(false);
   const [newBudget, setNewBudget] = useState("");
 
@@ -53,24 +53,15 @@ const HomeScreen: React.FC = () => {
     try {
       setIsLoading(true);
       const t = await getToken();
-      if (!t) {
-        setIsLoading(false);
-        return;
-      }
+      if (!t) return;
       setToken(t);
 
-      // Backend: /budget/months?month=2  → csak az adott hónap adata
       const budgetData = await getBudgetMonths(t, monthIndex);
-      console.log("Fetched budget data:", budgetData);
-
       const selected = budgetData.currentMonth;
       if (selected) {
         setBudgetMonth(selected);
         setBudgetMonthId(selected.id);
-      } else {
-        setBudgetMonth(null);
-        console.log("Nincs elérhető költségvetés ehhez a hónaphoz.");
-      }
+      } else setBudgetMonth(null);
     } catch (err) {
       console.error("Failed to fetch budget months:", err);
     } finally {
@@ -81,6 +72,13 @@ const HomeScreen: React.FC = () => {
   useEffect(() => {
     fetchBudgetData(selectedMonth);
   }, [selectedMonth]);
+
+  // 🔁 új költség után frissítjük a listát
+  useFocusEffect(
+    useCallback(() => {
+      fetchBudgetData(selectedMonth);
+    }, [selectedMonth])
+  );
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -99,149 +97,138 @@ const HomeScreen: React.FC = () => {
     }
   };
 
+  const handleDeleteExpense = async (id: number) => {
+    if (!token) return;
+    try {
+      await deleteExpense(token, id);
+      fetchBudgetData(selectedMonth);
+    } catch (err) {
+      console.error("Kiadás törlés hiba:", err);
+      Alert.alert("Hiba", "A törlés nem sikerült.");
+    }
+  };
+
+  const handleExcelExport = async () => {
+    if (!budgetMonth || !token) return;
+    try {
+      const { uri } = await exportExpensesToExcel(token, budgetMonth.id, months[selectedMonth]);
+      await Sharing.shareAsync(uri);
+    } catch (err) {
+      console.error("Export hiba:", err);
+      Alert.alert("Hiba", "Nem sikerült exportálni az adatokat.");
+    }
+  };
+
   const remainingPercent =
     budgetMonth && budgetMonth.total_budget > 0
-      ? Math.max(
-        0,
-        Math.min(
-          100,
-          (Number(budgetMonth.remaining_budget) /
-            Number(budgetMonth.total_budget)) *
-          100
-        )
-      )
+      ? Math.max(0, Math.min(100,
+        (Number(budgetMonth.remaining_budget) /
+         Number(budgetMonth.total_budget)) * 100))
       : 0;
 
   const renderMonthCard = (monthIndex: number) => (
-    <ScrollView
-      key={monthIndex}
-      contentContainerStyle={{ flexGrow: 1, padding: 16 }}
-      refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-      }
-    >
-      <Text
-        variant="headlineSmall"
+  <View key={monthIndex} style={{ flex: 1 }}>
+    <View style={{ padding: 16 }}>
+      <Card
         style={{
-          color: theme.colors.primary,
-          fontWeight: "600",
-          marginBottom: 12,
-          textAlign: "center",
+          marginBottom: 20,
+          paddingVertical: 20,
+          backgroundColor: theme.colors.surface,
+          borderRadius: 16,
+          elevation: 3,
+          position: "relative",
         }}
       >
-        {months[monthIndex]} havi költségvetés
-      </Text>
-
-      {isLoading ? (
-        <ActivityIndicator
-          animating={true}
-          color={theme.colors.primary}
-          style={{ marginTop: 40 }}
-        />
-      ) : (
-        <>
-          <Card
-            style={{
-              marginBottom: 20,
-              paddingVertical: 20,
-              backgroundColor: theme.colors.surface,
-              borderRadius: 16,
-              elevation: 3,
-              position: "relative",
-            }}
-          >
-            <Card.Content
+        <Card.Content
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "space-between",
+          }}
+        >
+          <View>
+            <Text
+              variant="titleMedium"
+              style={{ color: theme.colors.onSurfaceVariant }}
+            >
+              Havi költségvetés
+            </Text>
+            <Text
+              variant="headlineMedium"
               style={{
-                flexDirection: "row",
-                alignItems: "center",
-                justifyContent: "space-between",
+                color: theme.colors.primary,
+                fontWeight: "bold",
               }}
             >
-              <View>
-                <Text
-                  variant="titleMedium"
-                  style={{ color: theme.colors.onSurfaceVariant }}
-                >
-                  Elérhető keret:
-                </Text>
-
-                <Text
-                  variant="headlineMedium"
-                  style={{
-                    color: theme.colors.primary,
-                    fontWeight: "bold",
-                  }}
-                >
-                  {budgetMonth
-                    ? `${budgetMonth.remaining_budget.toLocaleString("hu-HU")} Ft`
-                    : "—"}
-                </Text>
-
-                {budgetMonth && (
-                  <Text
-                    style={{
-                      color: theme.colors.onSurfaceVariant,
-                      fontSize: 13,
-                      marginTop: 4,
-                    }}
-                  >
-                    Összesen: {budgetMonth.total_budget.toLocaleString("hu-HU")} Ft
-                  </Text>
-                )}
-              </View>
-
-              <CircularProgress
-                value={remainingPercent}
-                maxValue={100}
-                radius={40}
-                activeStrokeWidth={8}
-                inActiveStrokeWidth={8}
-                activeStrokeColor={theme.colors.primary}
-                inActiveStrokeColor={theme.colors.outline}
-                progressValueColor={theme.colors.onSurface}
-                progressValueFontSize={16}
-                inActiveStrokeOpacity={0.2}
-                duration={1200}
-                valueSuffix="%"
-              />
-            </Card.Content>
-
-            <IconButton
-              icon="pencil"
-              size={22}
-              onPress={() => {
-                setNewBudget(budgetMonth?.total_budget?.toString() || "");
-                setModalVisible(true);
-              }}
-              style={{
-                position: "absolute",
-                top: -20,
-                right: -6,
-              }}
-              iconColor={theme.colors.primary}
-            />
-          </Card>
-
-          {budgetMonth ? (
-            <ExpenseList token={token!} budgetMonthId={budgetMonth.id} />
-          ) : (
-            <Text style={{ color: theme.colors.onSurfaceVariant }}>
-              Még nincs rögzített havi keret.
+              {budgetMonth
+                ? `${budgetMonth.remaining_budget.toLocaleString("hu-HU")} Ft`
+                : "—"}
             </Text>
-          )}
-        </>
+            {budgetMonth && (
+              <Text
+                style={{
+                  color: theme.colors.onSurfaceVariant,
+                  fontSize: 13,
+                  marginTop: 4,
+                }}
+              >
+                Összesen: {budgetMonth.total_budget.toLocaleString("hu-HU")} Ft
+              </Text>
+            )}
+          </View>
+
+          <CircularProgress
+            value={remainingPercent}
+            maxValue={100}
+            radius={40}
+            activeStrokeWidth={8}
+            inActiveStrokeWidth={8}
+            activeStrokeColor={theme.colors.primary}
+            inActiveStrokeColor={theme.colors.outline}
+            progressValueColor={theme.colors.onSurface}
+            progressValueFontSize={16}
+            inActiveStrokeOpacity={0.2}
+            duration={1200}
+            valueSuffix="%"
+          />
+        </Card.Content>
+
+        <IconButton
+          icon="pencil"
+          size={22}
+          onPress={() => {
+            setNewBudget(budgetMonth?.total_budget?.toString() || "");
+            setModalVisible(true);
+          }}
+          style={{ position: "absolute", top: -20, right: -6 }}
+          iconColor={theme.colors.primary}
+        />
+      </Card>
+    </View>
+
+    <View style={{ flex: 1, paddingHorizontal: 16, paddingBottom: 100 }}>
+      {budgetMonth ? (
+        <ExpenseList
+          token={token!}
+          budgetMonthId={budgetMonth.id}
+          // ha a komponens támogatja:
+          onDelete={handleDeleteExpense}
+          // ha van benne pull-to-refresh támogatás:
+           refreshing={refreshing}
+           onRefresh={onRefresh}
+        />
+      ) : (
+        <Text style={{ color: theme.colors.onSurfaceVariant }}>
+          Még nincs rögzített havi keret.
+        </Text>
       )}
-    </ScrollView>
-  );
+    </View>
+  </View>
+);
+
 
   const renderDots = () => (
-    <View
-      style={{
-        flexDirection: "row",
-        justifyContent: "center",
-        marginBottom: 12,
-      }}
-    >
+    <View style={{ flexDirection: "row", justifyContent: "center", marginBottom: 12 }}>
       {months.map((_, idx) => (
         <TouchableOpacity
           key={idx}
@@ -261,29 +248,39 @@ const HomeScreen: React.FC = () => {
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
-      <View style={{ paddingTop: 50, alignItems: "center" }}>
+      {/* Fejléc + export gomb */}
+      <View style={{
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between",
+        paddingTop: 50,
+        paddingHorizontal: 16,
+      }}>
         <Text variant="headlineSmall" style={{ fontWeight: "600" }}>
           {months[selectedMonth]}
         </Text>
+        <IconButton
+          icon="file-excel"
+          size={26}
+          iconColor={theme.colors.primary}
+          onPress={handleExcelExport}
+        />
       </View>
 
       <Carousel
         width={width}
         height={Dimensions.get("window").height * 0.78}
         data={months}
-        scrollAnimationDuration={500}
+        scrollAnimationDuration={400}
         onSnapToItem={(index) => setSelectedMonth(index)}
         defaultIndex={currentMonthIndex}
         renderItem={({ index }) => renderMonthCard(index)}
-        loop={false}
         windowSize={2}
-        pagingEnabled
-        style={{ flexGrow: 0 }}
       />
 
       {renderDots()}
 
-      {/* ✏️ Modal */}
+      {/* Modal */}
       <Portal>
         <Modal
           visible={modalVisible}
@@ -308,11 +305,7 @@ const HomeScreen: React.FC = () => {
             style={{ marginBottom: 16 }}
           />
 
-          <Button
-            mode="contained"
-            onPress={handleUpdateBudget}
-            disabled={!newBudget}
-          >
+          <Button mode="contained" onPress={handleUpdateBudget} disabled={!newBudget}>
             Mentés
           </Button>
         </Modal>
@@ -335,9 +328,7 @@ const HomeScreen: React.FC = () => {
             onPress: () => router.push("/add-expense"),
           },
         ]}
-        style={{
-          paddingBottom: 60,
-        }}
+        style={{ paddingBottom: 60 }}
       />
     </View>
   );

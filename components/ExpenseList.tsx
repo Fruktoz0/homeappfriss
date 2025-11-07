@@ -13,6 +13,9 @@ import type { BudgetExpense } from '../types/budget';
 interface ExpenseListProps {
     token: string;
     budgetMonthId: number;
+    onDelete?: (id: number) => Promise<void>;
+    refreshing?: boolean;
+    onRefresh?: () => Promise<void>;
 }
 
 const RIGHT_ACTION_WIDTH = 80;
